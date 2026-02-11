@@ -1,4 +1,4 @@
 datasets:
   - path: json
-    data_files: ../../training_data/trl_grpo.jsonl
+    data_files: /root/Code/pdf-mining/training_data/outline/trl_grpo_labeled_2026_02_11_21_25_48.jsonl
     split: train
