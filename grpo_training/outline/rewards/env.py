@@ -37,8 +37,8 @@ HISTORY_MAX_LEN = _get_env("HISTORY_MAX_LEN", 20, int)
 # ===== Length Reward =====
 # MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 10000, int)
 # SOFT_PUNISH_CACHE  = _get_env("SOFT_PUNISH_CACHE", 2000, int)
-MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 100, int)
-SOFT_PUNISH_CACHE  = _get_env("SOFT_PUNISH_CACHE", 80, int)
+MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 10000, int)
+SOFT_PUNISH_CACHE  = _get_env("SOFT_PUNISH_CACHE", 2000, int)
 LENGTH_WEIGHT      = _get_env("LENGTH_WEIGHT", 1.0, float)
 
 # ===== Outline Reward =====

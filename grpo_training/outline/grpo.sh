@@ -1,13 +1,23 @@
 python grpo.py \
 --config dataset_config.yaml \
 --use_peft \
---model_name_or_path D:\modelscope\Qwen3-0.6B \
+--model_name_or_path /root/autodl-tmp/modelscope/Qwen3-4B \
 --reward_funcs rewards.length_reward.curriculum_length_reward rewards.outline_reward.curriculum_outline_reward \
 --reward_weights 1.0 1.0 \
---max_completion_length 1000 \
---per_device_train_batch_size 2 \
---gradient_accumulation_steps 1 \
---num_generations 2 \
+--max_completion_length 10000 \
+--per_device_train_batch_size 1 \
+--gradient_accumulation_steps 8 \
+--num_generations 8 \
 --num_train_epochs 5 \
 --log_completions \
---logging_steps 1
+--logging_steps 1 \
+--vllm_gpu_memory_utilization 0.5 \
+--vllm_mode colocate \
+--use_vllm \
+--use_liger_kernel \
+--save_strategy steps \
+--save_steps 50 \
+--save_total_limit 2 \
+--learning_rate 1e-5 \
+--report_to tensorboard \
+--load_in_4bit

@@ -21,7 +21,11 @@ tqdm>=4.65.0
 # 可选：训练相关
 # torch>=2.0.0
 transformers
-trl
+trl[vllm]
+peft
+bitsandbytes
+liger-kernel
+tensorboardX
 
 # 可选：数据标注
 # label-studio>=1.10.0
