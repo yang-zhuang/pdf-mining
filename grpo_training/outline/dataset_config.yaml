@@ -1,0 +1,4 @@
+datasets:
+  - path: json
+    data_files: ../../training_data/trl_grpo.jsonl
+    split: train

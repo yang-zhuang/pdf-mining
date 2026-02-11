@@ -1,0 +1,13 @@
+python grpo.py \
+--config dataset_config.yaml \
+--use_peft \
+--model_name_or_path D:\modelscope\Qwen3-0.6B \
+--reward_funcs rewards.length_reward.curriculum_length_reward rewards.outline_reward.curriculum_outline_reward \
+--reward_weights 1.0 1.0 \
+--max_completion_length 1000 \
+--per_device_train_batch_size 2 \
+--gradient_accumulation_steps 1 \
+--num_generations 2 \
+--num_train_epochs 5 \
+--log_completions \
+--logging_steps 1

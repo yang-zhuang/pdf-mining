@@ -1,0 +1,7 @@
+# 忽略标注数据导出文件
+labeling_data/
+*.json
+
+# 但保留状态文件的目录结构
+!.outline_labeling_state.json
+!.classification_labeling_state.json

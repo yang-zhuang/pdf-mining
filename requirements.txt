@@ -1,0 +1,27 @@
+# PDF Extractor 依赖包
+
+# LLM 接口
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# 数据处理
+numpy>=1.24.0
+pandas>=2.0.0
+
+# 配置管理
+pyyaml>=6.0
+
+# 日志和进度条
+tqdm>=4.65.0
+
+# OCR 相关（如果需要）
+# paddleocr>=2.7.0
+# opencv-python>=4.8.0
+
+# 可选：训练相关
+# torch>=2.0.0
+transformers
+trl
+
+# 可选：数据标注
+# label-studio>=1.10.0

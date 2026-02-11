@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+__pycache__/
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+nul
+extractor/outline_extractor/logs/
+extractor/outline_extractor/logs-*/
+extractor/outline_extractor/labeling_data/
+
+grpo_training/outline/trainer_output
+training_data/trl_grpo.jsonl
+
+extractor/outline_extractor/llm/prompts/outline_prompt_v1.txt
+extractor/outline_extractor/pipeline/outline_pipeline_v1.py
+*v1*
+token_analysis/outline/thinking/token_analysis/thinking_analysis_trl_grpo_labeled_2026_02_09_18_12_21.jsonl
+token_analysis/outline/thinking/token_analysis/thinking_analysis_trl_grpo_labeled_2026_02_09_18_12_21_summary.json
+
+
+
+# Model caches
+.cache/
+*.pt
+*.pth
+*.ckpt

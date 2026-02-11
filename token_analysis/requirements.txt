@@ -1,0 +1,15 @@
+# Token 分析模块依赖
+
+# 核心依赖
+transformers>=4.30.0
+torch>=2.0.0
+requests>=2.28.0
+
+# 可选依赖（用于加速）
+# accelerate
+# bitsandbytes
+
+# 说明：
+# - transformers: 用于加载 tokenizer
+# - torch: PyTorch，transformers 的依赖
+# - requests: 用于调用 vLLM API（思考模式）

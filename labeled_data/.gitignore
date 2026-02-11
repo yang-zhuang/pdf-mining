@@ -1,0 +1,26 @@
+# 临时文件和中间文件
+*.tmp
+*.bak
+*~
+*.swp
+
+# Label Studio 导出的原始文件（未整理）
+raw/
+export/
+downloads/
+
+# 保留已标注的 JSON 文件
+!outline/*.json
+!**/*_labeled.json
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.sublime-*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log

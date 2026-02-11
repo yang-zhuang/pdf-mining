@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del:*)",
+      "Bash(nul:*)",
+      "Bash(\"D:\\Code\\PDF解析\\pdf_extractor\\outline_extractor\\utils\\__init__.py\")",
+      "Bash(python -m labeling.outline.prepare:*)",
+      "Bash(python:*)",
+      "Bash(tree:*)",
+      "Bash(labeled_data_tree.txt)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
