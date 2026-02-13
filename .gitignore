@@ -74,3 +74,6 @@ token_analysis/outline/thinking/token_analysis/thinking_analysis_trl_grpo_labele
 *.pt
 *.pth
 *.ckpt
+
+# Ignore old training data directories
+*training_data*-old/
