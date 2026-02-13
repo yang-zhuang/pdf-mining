@@ -4,14 +4,14 @@ python grpo.py \
 --model_name_or_path /root/autodl-tmp/modelscope/Qwen3-4B \
 --reward_funcs rewards.length_reward.curriculum_length_reward rewards.outline_reward.curriculum_outline_reward \
 --reward_weights 1.0 1.0 \
---max_completion_length 10000 \
+--max_completion_length 5500 \
 --per_device_train_batch_size 1 \
---gradient_accumulation_steps 8 \
---num_generations 8 \
---num_train_epochs 5 \
+--gradient_accumulation_steps 2 \
+--num_generations 2 \
+--num_train_epochs 10 \
 --log_completions \
 --logging_steps 1 \
---vllm_gpu_memory_utilization 0.5 \
+--vllm_gpu_memory_utilization 0.15 \
 --vllm_mode colocate \
 --use_vllm \
 --use_liger_kernel \

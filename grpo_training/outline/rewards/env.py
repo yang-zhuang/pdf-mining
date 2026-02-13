@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def _get_env(key: str, default, cast):
     """
@@ -27,8 +30,8 @@ def _get_env(key: str, default, cast):
     return default if val is None else cast(val)
 
 # ===== Curriculum =====
-CURRICULUM_EARLY_EPOCHS = _get_env("CURRICULUM_EARLY_EPOCHS", 2, int)
-CURRICULUM_MID_EPOCHS   = _get_env("CURRICULUM_MID_EPOCHS", 1, int)
+CURRICULUM_EARLY_EPOCHS = _get_env("CURRICULUM_EARLY_EPOCHS", 4, int)
+CURRICULUM_MID_EPOCHS   = _get_env("CURRICULUM_MID_EPOCHS", 2, int)
 
 # ===== EMA =====
 EMA_ALPHA = _get_env("EMA_ALPHA", 0.2, float)
@@ -37,7 +40,7 @@ HISTORY_MAX_LEN = _get_env("HISTORY_MAX_LEN", 20, int)
 # ===== Length Reward =====
 # MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 10000, int)
 # SOFT_PUNISH_CACHE  = _get_env("SOFT_PUNISH_CACHE", 2000, int)
-MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 10000, int)
+MAX_COMPLETION_LEN = _get_env("MAX_COMPLETION_LEN", 5500, int)
 SOFT_PUNISH_CACHE  = _get_env("SOFT_PUNISH_CACHE", 2000, int)
 LENGTH_WEIGHT      = _get_env("LENGTH_WEIGHT", 1.0, float)
 

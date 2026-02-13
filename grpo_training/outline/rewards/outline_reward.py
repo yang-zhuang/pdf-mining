@@ -56,7 +56,11 @@ def curriculum_outline_reward(prompts, completions, completion_ids, **kwargs):
                 hallucinated.append(answer_line)
 
         recall = len(recalled_answers) / len(solution_lines)
-        penalty = len(hallucinated) / len(answer_lines)
+
+        if len(answer_lines) == 0:
+            penalty = 1
+        else:
+            penalty = len(hallucinated) / len(answer_lines)
 
         if phase == "early":
             reward = recall

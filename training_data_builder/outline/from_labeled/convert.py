@@ -41,7 +41,8 @@ def convert_labeled_to_training(
     min_length: int = None,
     max_length: int = None,
     shuffle: bool = True,
-    seed: int = 42
+    seed: int = 42,
+    no_think_count: int = 0  # 要添加 /no_think 的数据数量
 ):
     """
     从标注数据转换为训练数据
@@ -88,6 +89,58 @@ def convert_labeled_to_training(
     print(f"\n[步骤 3] 转换为 {format} 格式")
     training_data = convert_training_format(data, format=format)
     print(f"[信息] 转换完成，共 {len(training_data)} 条数据")
+
+    # 步骤 3.5: 添加 /no_think 功能（仅对 trl_grpo 格式有效）
+    if format == "trl_grpo" and no_think_count > 0:
+        print(f"\n[步骤 3.5] 添加 /no_think 模式数据")
+
+        # 为每个数据项添加索引，以便恢复原始顺序
+        indexed_data = list(enumerate(training_data))
+
+        # 根据字符数排序（prompt + solution）
+        def get_total_length(idx_item):
+            item = idx_item[1]
+            prompt = item.get("prompt", [{}])[0].get("content", "") if item.get("prompt") else ""
+            solution = item.get("solution", "")
+            return len(prompt) + len(solution)
+
+        # 排序数据（保留原始索引）
+        sorted_indexed_data = sorted(indexed_data, key=get_total_length)
+        total_len = len(sorted_indexed_data)
+
+        print(f"[信息] 已根据字符数排序数据（prompt + solution）")
+
+        # 取前 n 条和后 n 条数据（数量不超过总数据的一半）
+        n = min(no_think_count, total_len // 2)
+
+        if n == 0:
+            print(f"[警告] 无法添加 /no_think：数据总数 ({total_len}) 太少")
+        else:
+            # 选择前 n 条和后 n 条数据
+            selected_indices = list(range(n)) + list(range(total_len - n, total_len))
+            print(f"[信息] 选择了前 {n} 条和后 {n} 条数据添加 /no_think")
+
+            # 为选中的数据添加 /no_think 后缀
+            modified_count = 0
+            for idx in selected_indices:
+                original_idx, item = sorted_indexed_data[idx]
+                if item.get("prompt") and len(item["prompt"]) > 0:
+                    original_content = item["prompt"][0].get("content", "")
+                    # 检查是否已经包含 /no_think
+                    if not original_content.rstrip().endswith("/no_think"):
+                        item["prompt"][0]["content"] = original_content.rstrip() + " /no_think"
+                        modified_count += 1
+
+            # 恢复原始顺序
+            training_data = [item for idx, item in sorted(sorted_indexed_data, key=lambda x: x[0])]
+            print(f"[信息] 成功为 {modified_count} 条数据添加了 /no_think 后缀")
+
+    # 如果需要打乱数据（在非拆分模式下）
+    if shuffle:
+        import random
+        random.seed(seed)
+        random.shuffle(training_data)
+        print(f"[信息] 数据已打乱（seed: {seed}）")
 
     # 步骤 4: 验证数据
     print(f"\n[步骤 4] 验证数据质量")
@@ -179,7 +232,7 @@ def convert_labeled_to_training(
 
         # 保存合并数据（可选，用于快速测试）
         merged_file = output_dir_path / f"{base_name}_all{ext}"
-        save_training_data(training_data, str(merged_file), format)
+        save_training_data(6, str(merged_file), format)
     else:
         # 步骤 5: 保存数据（不拆分）
 
@@ -287,6 +340,13 @@ def parse_args():
         help='随机种子（默认: 42）'
     )
 
+    parser.add_argument(
+        '--no-think-count',
+        type=int,
+        default=10,
+        help='添加 /no_think 的数据数量（从字符数最少和最多的数据中选择，默认: 0）'
+    )
+
     return parser.parse_args()
 
 
@@ -302,7 +362,8 @@ def main():
         min_length=args.min_length,
         max_length=args.max_length,
         shuffle=args.shuffle,
-        seed=args.seed
+        seed=args.seed,
+        no_think_count=args.no_think_count
     )
 
 

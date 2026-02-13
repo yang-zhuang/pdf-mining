@@ -44,14 +44,16 @@ def curriculum_length_reward(prompts, completions, completion_ids, **kwargs):
     - Early 阶段：仅奖励更短输出，不施加惩罚
     - Mid 阶段：仅对长度增长和超长输出施加惩罚
     - Late 阶段：同时奖励更短输出并惩罚过长输出
+    - /no_think 模式：跳过长度奖励（返回 0.0），仅依赖 outline_reward
 
     核心特性：
     - 使用 prompt 级 EMA 作为长度基线
     - 同一 prompt 的多 completion 自动聚合
     - 适配 GRPO / PPO 等 RL 训练框架
+    - 对于 /no_think 模式的 prompt，长度奖励失效（因为模型直接输出答案，不进行思考）
 
     参数说明：
-    - prompts: 原始 prompt 列表
+    - prompts: 原始 prompt 列表（支持 string 或 [{"role": "user", "content": "..."}] 格式）
     - completions: 模型输出（未直接使用，仅为接口一致性）
     - completion_ids: token id 序列，用于计算长度
     - kwargs: 额外参数（如 trainer_state）
@@ -72,36 +74,49 @@ def curriculum_length_reward(prompts, completions, completion_ids, **kwargs):
 
     # ---------- 第一轮：计算 reward（不更新状态） ----------
     for prompt, completion_id in zip(prompts, completion_ids):
-        prompt_hash = prompt_to_key(prompt)
-        state = PROMPT_STATE[prompt_hash]["length"]
-        ema_len = state["ema"]
+        # 提取 prompt 内容（支持 string 和 [{"role": "user", "content": "..."}] 格式）
+        prompt_content = ""
+        if isinstance(prompt, str):
+            prompt_content = prompt
+        elif isinstance(prompt, list) and len(prompt) > 0 and isinstance(prompt[0], dict):
+            prompt_content = prompt[0].get("content", "")
 
-        completion_length = len(completion_id)
+        # 检查是否为 /no_think 模式，如果是则跳过长度奖励
+        # /no_think 模式下模型直接输出答案，长度奖励不适用
+        is_no_think = isinstance(prompt_content, str) and prompt_content.rstrip().endswith("/no_think")
 
-        length_reward = 0.0
-        if phase == "early":
-            if ema_len is None:
-                length_reward = max((MAX_COMPLETION_LEN - completion_length) / MAX_COMPLETION_LEN, 0.0)
-            else:
-                length_reward = max((ema_len - completion_length) / ema_len, 0.0)
-            # length_reward *= early_scale
-        elif phase == "mid":
-            if ema_len and completion_length > ema_len:
-                length_reward -= (completion_length - ema_len) / ema_len
-            length_reward += soft_overlong_penalty(completion_length)
-            # length_reward *= middle_scale
+        if is_no_think:
+            length_reward = 0.0
         else:
-            if ema_len:
-                if completion_length < ema_len:
-                    length_reward += (ema_len - completion_length) / ema_len
-                else:
-                    length_reward += -(completion_length - ema_len) / ema_len
+            prompt_hash = prompt_to_key(prompt)
+            state = PROMPT_STATE[prompt_hash]["length"]
+            ema_len = state["ema"]
 
-            length_reward += soft_overlong_penalty(completion_length)
+            completion_length = len(completion_id)
+
+            length_reward = 0.0
+            if phase == "early":
+                if ema_len is None:
+                    length_reward = max((MAX_COMPLETION_LEN - completion_length) / MAX_COMPLETION_LEN, 0.0)
+                else:
+                    length_reward = max((ema_len - completion_length) / ema_len, 0.0)
+            elif phase == "mid":
+                if ema_len and completion_length > ema_len:
+                    length_reward -= (completion_length - ema_len) / ema_len
+                length_reward += soft_overlong_penalty(completion_length)
+            else:
+                if ema_len:
+                    if completion_length < ema_len:
+                        length_reward += (ema_len - completion_length) / ema_len
+                    else:
+                        length_reward += -(completion_length - ema_len) / ema_len
+
+                length_reward += soft_overlong_penalty(completion_length)
 
         rewards.append(length_reward)
 
         # 聚合（不更新 EMA）
+        prompt_hash = prompt_to_key(prompt)
         prompt_agg[prompt_hash]["lengths"].append(completion_length)
 
     # ---------- 第二轮：prompt 级更新 EMA / history ----------
