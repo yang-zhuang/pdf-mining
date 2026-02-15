@@ -77,3 +77,4 @@ token_analysis/outline/thinking/token_analysis/thinking_analysis_trl_grpo_labele
 
 # Ignore old training data directories
 *training_data*-old/
+*ipynb

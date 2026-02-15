@@ -87,6 +87,7 @@ def curriculum_length_reward(prompts, completions, completion_ids, **kwargs):
 
         if is_no_think:
             length_reward = 0.0
+            completion_length = len(completion_id)
         else:
             prompt_hash = prompt_to_key(prompt)
             state = PROMPT_STATE[prompt_hash]["length"]
