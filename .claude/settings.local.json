@@ -14,7 +14,17 @@
       "Bash(git push:*)",
       "Bash(.gitignore)",
       "Bash(npm outdated:*)",
-      "Bash(npm update:*)"
+      "Bash(npm update:*)",
+      "mcp__web-reader__webReader",
+      "Bash(iconv:*)",
+      "Bash(export PYTHONIOENCODING=utf-8:*)",
+      "mcp__zai-mcp-server__diagnose_error_screenshot",
+      "mcp__zai-mcp-server__analyze_image",
+      "Bash(head:*)",
+      "Bash(ls:*)",
+      "Bash(powershell -Command \"Get-Content grpo_labeled_*.jsonl -Head 1 | ConvertFrom-Json | ConvertTo-Json -Depth 1\")",
+      "Bash(git mv:*)",
+      "Bash(powershell -Command \"Move-Item -Path ''grpo_training'' -Destination ''training''\")"
     ],
     "deny": [],
     "ask": []

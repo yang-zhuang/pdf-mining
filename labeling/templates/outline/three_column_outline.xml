@@ -1,0 +1,256 @@
+<View>
+    <Header value="提纲标注 - 模型对比与人工校正" />
+
+    <Style>
+        /* --- 1. 外层大容器 (支持横向滚动) --- */
+        .three-column-container {
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+            padding: 16px;
+            height: 90vh;
+            background: #f8fafc;
+            border-radius: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow-x: auto;
+        }
+
+        /* --- 2. 列容器 (支持横向拖拽) --- */
+        .column {
+            display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            height: 100%;
+
+            /* 开启水平拖拽 */
+            resize: horizontal;
+            overflow: hidden;
+            position: relative;
+
+            /* 宽度设置 */
+            flex-basis: 33%;
+            flex-shrink: 0;
+            min-width: 320px;
+            max-width: 80%;
+        }
+
+        /* 列宽拖拽手柄图标 */
+        .column::after {
+            content: "↔";
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-size: 12px;
+            color: #cbd5e0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .column-original { border: 2px solid #e2e8f0; }
+        .column-model    { border: 2px solid #fed7aa; }
+        .column-annotation { border: 2px solid #93c5fd; }
+
+        /* --- 3. 内容区域 --- */
+        .content-area {
+            flex: 1;
+            padding: 12px;
+            overflow-y: auto;
+            padding-bottom: 40px;
+        }
+
+        /* --- 4. 内部可垂直缩放的盒子 --- */
+        .resizable-box {
+            position: relative;
+            resize: vertical;
+            overflow: auto;
+            min-height: 80px;
+            height: auto;
+
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px;
+            padding-top: 24px;
+            margin-bottom: 15px;
+
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 14px;
+            color: #333;
+        }
+
+        /* 垂直拖拽手柄 */
+        .resizable-box::after {
+            content: "";
+            position: absolute;
+            bottom: 1px;
+            right: 1px;
+            width: 8px;
+            height: 8px;
+            cursor: ns-resize;
+            border-bottom: 2px solid #cbd5e0;
+            border-right: 2px solid #cbd5e0;
+        }
+
+        /* --- 5. 交互式复制样式 --- */
+        .interactive-box {
+            user-select: all;
+            cursor: pointer;
+        }
+        .interactive-box:hover {
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+        }
+
+        .box-hint {
+            position: absolute;
+            top: 4px;
+            right: 8px;
+            font-size: 9px;
+            color: #999;
+            pointer-events: none;
+            text-transform: uppercase;
+            font-weight: bold;
+            opacity: 0.6;
+        }
+
+        /* 颜色主题 */
+        .thinking-box { background: #fffbeb; border-color: #fbd38d; }
+        .answer-box   { background: #f0f9ff; border-color: #90cdf4; }
+        .model-box    { background: #ebf4ff; border-color: #a3bffa; }
+
+        /* --- 6. 核心修改：输入框样式优化与按钮隐藏 --- */
+        .lsf-text-area {
+            margin-bottom: 10px;
+        }
+
+        /* 强制覆盖 Label Studio 的输入框样式 */
+        .lsf-text-area textarea {
+            resize: vertical !important;
+            min-height: 150px !important;
+            font-family: inherit;
+            border: 1px solid #93c5fd !important;
+            background-color: #f0f9ff !important;
+            padding: 12px !important;
+            border-radius: 8px !important;
+        }
+
+        .lsf-text-area textarea:focus {
+            border-color: #3182ce !important;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2) !important;
+        }
+
+        /* !!! 关键修复 !!! */
+        /* 彻底隐藏输入框下方的 Add/Update 按钮栏 */
+        .lsf-text-area__buttons {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            opacity: 0 !important;
+        }
+
+        /* 第一栏专用样式 */
+        .copyable-text {
+            user-select: all;
+            cursor: pointer;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .copyable-text:hover { background-color: #e2e8f0; }
+
+        .section-header {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 8px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+        }
+        .header-thinking { background: #fef5e7; color: #d69e2e; }
+        .header-answer   { background: #e9f5ff; color: #2b6cb0; }
+        .header-model    { background: #ebf4ff; color: #4c51bf; }
+
+        .copy-hint {
+            font-size: 10px; color: #718096; margin-bottom: 5px;
+            display: flex; align-items: center; gap: 4px;
+        }
+    </Style>
+
+    <View className="three-column-container">
+
+        <!-- 第 1 栏: 原始 Prompt -->
+        <View className="column column-original">
+            <Header value="原始 Prompt" style="padding: 10px; color: #fff; font-size: 14px; text-align: center; margin: 0; background: linear-gradient(135deg, #718096 0%, #4a5568 100%);" />
+            <View className="content-area">
+                <View className="copy-hint">📋 单击全选 -> Ctrl+C 复制</View>
+                <View className="resizable-box" style="resize: none; border: none; background: transparent; padding: 0;">
+                    <View className="copyable-text" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
+                        <Text name="prompt" value="$prompt" />
+                    </View>
+                </View>
+            </View>
+        </View>
+
+        <!-- 第 2 栏: 模型输出 -->
+        <View className="column column-model">
+            <Header value="模型输出" style="padding: 10px; color: #fff; font-size: 14px; text-align: center; margin: 0; background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);" />
+            <View className="content-area">
+
+                <View>
+                    <View className="section-header header-model">模型名称</View>
+                    <View className="resizable-box model-box" style="height: auto; min-height: 40px; padding-top: 14px;">
+                        <Text name="model" value="$model" />
+                    </View>
+                </View>
+
+                <View>
+                    <View className="section-header header-thinking">Thinking Process</View>
+                    <View className="resizable-box thinking-box interactive-box">
+                        <View className="box-hint">📋 Click to copy</View>
+                        <Text name="thinking" value="$thinking" />
+                    </View>
+                </View>
+
+                <View>
+                    <View className="section-header header-answer">Final Answer</View>
+                    <View className="resizable-box answer-box interactive-box">
+                        <View className="box-hint">📋 Click to copy</View>
+                        <Text name="answer" value="$answer" />
+                    </View>
+                </View>
+            </View>
+        </View>
+
+        <!-- 第 3 栏: 人工标注 -->
+        <View className="column column-annotation">
+            <Header value="人工标注" style="padding: 10px; color: #fff; font-size: 14px; text-align: center; margin: 0; background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);" />
+            <View className="content-area">
+
+                <!-- 核心修复：把 toName 加回来了 -->
+                <View style="margin-bottom: 20px;">
+                    <View className="section-header header-thinking">修正 Thinking</View>
+                    <!-- 这里的 CSS .lsf-text-area__buttons {display:none} 负责隐藏按钮 -->
+                    <TextArea name="annotated_thinking"
+                              toName="prompt"
+                              placeholder="在此编辑思考过程..."
+                              maxSubmissions="1"
+                              rows="10" />
+                </View>
+
+                <View style="margin-bottom: 20px;">
+                    <View className="section-header header-answer">修正 Answer</View>
+                    <!-- 这里的 CSS .lsf-text-area__buttons {display:none} 负责隐藏按钮 -->
+                    <TextArea name="annotated_answer"
+                              toName="prompt"
+                              placeholder="在此编辑最终答案..."
+                              maxSubmissions="1"
+                              rows="10" />
+                </View>
+            </View>
+        </View>
+
+    </View>
+</View>

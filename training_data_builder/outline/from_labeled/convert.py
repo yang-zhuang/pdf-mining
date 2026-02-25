@@ -2,271 +2,464 @@
 从标注数据构建训练数据
 
 将 Label Studio 导出的标注数据转换为各种训练格式。
-支持的数据格式：Alpaca, ShareGPT, Instruction, OpenAI Chat
+支持的数据格式：SFT (unsloth), GRPO, Evaluation
 
 使用方法：
+    # 构建SFT/GRPO/评估数据集（指定模板）
     python -m training_data_builder.from_labeled.convert \
-        --input ../labeled_data/outline/batch_01_labeled.json \
-        --format alpaca \
-        --output training_data/alpaca_batch_01.json
+        --input-dir ../labeled_data/outline/three_column \
+        --output-dir ../../training_data/outline \
+        --template three_column
+        --seed 42
 """
 
 import argparse
-import sys
+import json
+import random
+import hashlib
 from pathlib import Path
 from datetime import datetime
+from typing import List, Dict, Tuple
 
-# 添加父目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from training_data_builder.utils import (
-    TrainingFormat,
-    load_json_file,
-    convert_training_format,
-    validate_training_data,
-    split_train_val_test,
-    save_training_data,
-    filter_data_by_length,
-    load_existing_hashes,
-    filter_new_data
-)
+def adjust_answer_indentation(answer: str) -> str:
+    """
+    调整 answer 的缩进格式
+
+    根据行内是否包含 '[二级]' 或 '[三级]' 来添加相应的空格缩进：
+    - 包含 '[二级]' 的行：开头添加 2 个空格
+    - 包含 '[三级]' 的行：开头添加 4 个空格
+    - 其他行：不添加缩进
+
+    Args:
+        answer: 原始 answer 字符串
+
+    Returns:
+        调整缩进后的 answer 字符串
+    """
+    if not answer:
+        return answer
+
+    lines = answer.split('\n')
+    adjusted_lines = []
+
+    for line in lines:
+        # 先去除行首和行尾的空白字符（不包括内部空格）
+        stripped_line = line.strip()
+        if not stripped_line:
+            # 空行保留原样
+            adjusted_lines.append('')
+            continue
+
+        # 判断是否需要缩进
+        if '[三级]' in stripped_line:
+            # 三级标题：4个空格缩进
+            adjusted_lines.append('    ' + stripped_line)
+        elif '[二级]' in stripped_line:
+            # 二级标题：2个空格缩进
+            adjusted_lines.append('  ' + stripped_line)
+        else:
+            # 其他行：不缩进
+            adjusted_lines.append(stripped_line)
+
+    return '\n'.join(adjusted_lines)
+
+
+def load_labeled_data(input_dir: str, existing_prompts: set = None) -> List[Dict]:
+    """
+    从指定文件夹加载标注数据
+
+    Args:
+        input_dir: 标注数据文件夹路径
+        existing_prompts: 已存在的 prompt 集合，用于断点续传
+
+    Returns:
+        提取的数据列表，每条数据包含 prompt, thinking, answer
+    """
+    if existing_prompts is None:
+        existing_prompts = set()
+
+    input_path = Path(input_dir)
+    if not input_path.exists():
+        raise FileNotFoundError(f"文件夹不存在: {input_dir}")
+
+    # 查找所有 JSON 文件
+    json_files = list(input_path.glob("*.json"))
+    if not json_files:
+        raise ValueError(f"在 {input_dir} 中没有找到 JSON 文件")
+
+    print(f"[开始] 加载标注数据")
+    print(f"[配置] 输入文件夹: {input_dir}")
+    print(f"[信息] 找到 {len(json_files)} 个 JSON 文件")
+    print(f"[信息] 已存在数据: {len(existing_prompts)} 条")
+
+    all_data = []
+    skipped_count = 0
+
+    for json_file in json_files:
+        print(f"[处理] 读取文件: {json_file.name}")
+        with open(json_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 处理每个标注项
+        for item in data:
+            # 提取原始 prompt
+            prompt = item.get('data', {}).get('prompt', '')
+
+            # 计算 prompt 的 hash，用于检查是否已存在
+            prompt_hash = hashlib.md5(prompt.encode('utf-8')).hexdigest()
+
+            # 断点续传：如果 prompt 已存在则跳过
+            if prompt_hash in existing_prompts:
+                skipped_count += 1
+                continue
+
+            # 提取人工标注中的思考内容和答案
+            annotations = item.get('annotations', [])
+            if not annotations:
+                continue
+
+            result = annotations[0].get('result', [])
+            if len(result) < 2:
+                continue
+
+            # result[0] 是思考内容 (annotated_thinking)
+            thinking = result[0].get('value', {}).get('text', [''])[0] if result[0].get('value', {}).get('text') else ''
+
+            # result[1] 是答案 (annotated_answer)
+            answer = result[1].get('value', {}).get('text', [''])[0] if len(result) > 1 and result[1].get('value', {}).get('text') else ''
+
+            # 调整 answer 的缩进格式
+            answer = adjust_answer_indentation(answer)
+
+            # 构造数据字典
+            data_dict = {
+                'prompt': prompt,
+                'prompt_hash': prompt_hash,
+                'thinking': thinking,
+                'answer': answer
+            }
+
+            all_data.append(data_dict)
+
+    print(f"[完成] 成功加载 {len(all_data)} 条标注数据（跳过已存在: {skipped_count} 条）")
+    return all_data
+
+
+def load_existing_prompts(output_dir: str, template: str = None) -> set:
+    """
+    从已保存的训练数据中加载所有 prompt 的 hash 集合
+
+    Args:
+        output_dir: 输出文件夹路径
+        template: 模板名称，用于定位子目录
+
+    Returns:
+        已存在的 prompt hash 集合
+    """
+    existing_prompts = set()
+
+    if template:
+        # 如果指定了模板，检查对应的子目录
+        output_path = Path(output_dir) / template
+    else:
+        output_path = Path(output_dir)
+
+    if not output_path.exists():
+        return existing_prompts
+
+    # 查找所有相关的 JSONL 文件
+    jsonl_files = list(output_path.glob("*.jsonl"))
+
+    for jsonl_file in jsonl_files:
+        try:
+            with open(jsonl_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                        # 提取 prompt
+                        if 'conversations' in item:
+                            # SFT 格式
+                            prompt = item['conversations'][0]['content']
+                        elif 'prompt' in item:
+                            # GRPO 格式或评估格式
+                            prompt_messages = item.get('prompt', [])
+                            if isinstance(prompt_messages, list) and len(prompt_messages) > 0:
+                                prompt = prompt_messages[0].get('content', '')
+                            else:
+                                prompt = item.get('prompt', '')
+                        else:
+                            continue
+
+                        # 计算 hash 并添加到集合
+                        prompt_hash = hashlib.md5(prompt.encode('utf-8')).hexdigest()
+                        existing_prompts.add(prompt_hash)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            print(f"[警告] 读取文件 {jsonl_file} 失败: {e}")
+            continue
+
+    return existing_prompts
+
+
+def calculate_total_length(item: Dict) -> int:
+    """计算单条数据的总字符数（prompt + thinking + answer）"""
+    return len(item.get('prompt', '')) + len(item.get('thinking', '')) + len(item.get('answer', ''))
+
+
+def sort_data_by_length(data: List[Dict]) -> List[Dict]:
+    """按照总字符数排序数据（从多到少）"""
+    sorted_data = sorted(data, key=calculate_total_length, reverse=True)
+    print(f"[信息] 数据已按字符数排序（从多到少）")
+    if sorted_data:
+        print(f"  最多: {calculate_total_length(sorted_data[0])} 字符")
+        print(f"  最少: {calculate_total_length(sorted_data[-1])} 字符")
+    return sorted_data
+
+
+def split_into_three_sets(data: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    """
+    将数据按照字符数分布拆分为 评估、SFT、GRPO 三组
+
+    拆分策略：
+    1. 先将排序好的数据拆成两半
+       - 第一半：字符数最多的部分（已排序）
+       - 第二半：字符数最少的部分（需要反转）
+
+    2. 评估数据：
+       - 从第一半取前 1/3
+       - 从第二半取最后 1/3
+
+    3. SFT 数据：
+       - 从第一半取中间 1/3
+       - 从第二半取中间 1/3
+
+    4. GRPO 数据：
+       - 从第一半取最后 1/3
+       - 从第二半取前 1/3
+    """
+    total = len(data)
+    half = total // 2
+
+    # 第一半：字符数最多（已排序）
+    first_half = data[:half]
+
+    # 第二半：字符数最少，需要反转使开头是最少的
+    second_half = data[half:][::-1]
+
+    # 计算各部分的 1/3 数量
+    first_third = len(first_half) // 3
+    second_third = len(second_half) // 3
+
+    # 评估数据
+    eval_data = first_half[:first_third] + second_half[-second_third:]
+
+    # SFT 数据
+    sft_first_start = first_third
+    sft_first_end = first_third * 2
+    sft_second_start = second_third
+    sft_second_end = second_third * 2
+
+    sft_data = first_half[sft_first_start:sft_first_end] + second_half[sft_second_start:sft_second_end]
+
+    # GRPO 数据
+    grpo_data = first_half[sft_first_end:] + second_half[:second_third]
+
+    print(f"\n[拆分] 数据集拆分结果:")
+    print(f"  总数据: {total}")
+    print(f"  评估数据: {len(eval_data)} ({len(eval_data)/total*100:.1f}%)")
+    print(f"  SFT 数据: {len(sft_data)} ({len(sft_data)/total*100:.1f}%)")
+    print(f"  GRPO 数据: {len(grpo_data)} ({len(grpo_data)/total*100:.1f}%)")
+
+    return sft_data, grpo_data, eval_data
+
+
+def format_sft_data(data: List[Dict]) -> List[Dict]:
+    """
+    格式化 SFT 数据为 unsloth 格式
+
+    格式：
+    {
+        "conversations": [
+            {"content": prompt, "role": "user"},
+            {"content": "思考内容\n\n答案", "role": "assistant"}
+        ]
+    }
+    """
+    sft_formatted = []
+
+    for item in data:
+        prompt = item.get('prompt', '')
+        thinking = item.get('thinking', '')
+        answer = item.get('answer', '')
+
+        # assistant 的 content 是 "思考内容\n\n答案"
+        assistant_content = f"<think>\n{thinking}\n</think>\n\n{answer}" if thinking else answer
+        assistant_content = assistant_content.strip()
+
+        sft_item = {
+            "conversations": [
+                {
+                    "content": prompt,
+                    "role": "user"
+                },
+                {
+                    "content": assistant_content,
+                    "role": "assistant"
+                }
+            ]
+        }
+        sft_formatted.append(sft_item)
+
+    return sft_formatted
+
+
+def format_grpo_data(data: List[Dict]) -> List[Dict]:
+    """
+    格式化 GRPO 数据为 TRL GRPO 格式
+
+    格式：
+    {
+        "prompt": [{"role": "user", "content": prompt}],
+        "solution": "思考内容\n\n答案"
+    }
+    """
+    grpo_formatted = []
+
+    for item in data:
+        prompt = item.get('prompt', '')
+        thinking = item.get('thinking', '')
+        answer = item.get('answer', '')
+
+        grpo_item = {
+            "prompt": [{"role": "user", "content": prompt}],
+            'thinking': thinking,
+            "solution": answer
+        }
+        grpo_formatted.append(grpo_item)
+
+    return grpo_formatted
+
+
+def format_eval_data(data: List[Dict]) -> List[Dict]:
+    """
+    格式化评估数据（保持原始格式）
+
+    格式：{
+        "prompt": "...",
+        "thinking": "...",
+        "answer": "..."
+    }
+    """
+    return data.copy()
+
+
+def save_jsonl_data(data: List[Dict], output_file: str):
+    """保存数据为 JSONL 格式"""
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for item in data:
+            json.dump(item, f, ensure_ascii=False)
+            f.write('\n')
+
+    print(f"[成功] 已保存 {len(data)} 条数据到: {output_file}")
+
+
+def save_json_data(data: List[Dict], output_file: str):
+    """保存数据为 JSON 格式"""
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"[成功] 已保存 {len(data)} 条数据到: {output_file}")
 
 
 def convert_labeled_to_training(
-    input_file: str,
-    format: TrainingFormat = "alpaca",
+    input_dir: str,
     output_dir: str = None,
-    output_file: str = None,
-    split_ratio: str = None,  # "0.8,0.1,0.1"
-    min_length: int = None,
-    max_length: int = None,
-    shuffle: bool = True,
+    template: str = None,
     seed: int = 42,
-    no_think_count: int = 0  # 要添加 /no_think 的数据数量
 ):
     """
-    从标注数据转换为训练数据
+    从标注数据转换为 SFT、GRPO、评估三组数据
 
     Args:
-        input_file: 输入 JSON 文件路径（标注数据）
-        format: 目标训练格式
-        output_dir: 输出文件夹路径（可选，默认: ../../training_data/）
-        output_file: 输出文件名（可选，默认: {format}_labeled_{timestamp}.json 或 .jsonl）
-        split_ratio: 数据集拆分比例 "train,val,test"
-        min_length: 响应最小长度（字符数）
-        max_length: 响应最大长度（字符数）
-        shuffle: 是否打乱数据
-        seed: 随机种子
+        input_dir: 输入文件夹路径（标注数据）
+        output_dir: 输出文件夹路径（可选，默认: ../../training_data/outline/）
+        template: 模板名称（如 three_column），用于创建子目录保存数据
+        seed: 随机种子，用于 shuffle 数据
     """
-    print(f"[开始] 从标注数据构建训练数据")
-    print(f"[配置] 输入文件: {input_file}")
-    print(f"[配置] 目标格式: {format}")
-
     # 设置默认输出目录
     if output_dir is None:
-        output_dir = "../../training_data/"
-    print(f"[配置] 输出文件夹: {output_dir}")
+        output_dir = "../../training_data/outline/"
 
-    if output_file:
-        print(f"[配置] 输出文件名: {output_file}")
+    output_dir_path = Path(output_dir)
 
-    if split_ratio:
-        print(f"[配置] 数据拆分比例: {split_ratio}")
+    # 如果指定了模板，创建对应的子目录
+    if template:
+        output_dir_path = output_dir_path / template
+    output_dir_path.mkdir(parents=True, exist_ok=True)
 
-    if min_length or max_length:
-        print(f"[配置] 长度过滤: min={min_length}, max={max_length}")
+    print(f"[配置] 输出文件夹: {output_dir_path}")
 
-    # 步骤 1: 加载标注数据
-    print(f"\n[步骤 1] 加载标注数据")
-    data = load_json_file(input_file)
+    # 生成时间戳
+    timestamp = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
 
-    # 步骤 2: 过滤数据
-    if min_length or max_length:
-        print(f"\n[步骤 2] 过滤数据")
-        data = filter_data_by_length(data, min_length, max_length, field="response")
+    # 步骤 1: 加载已存在的数据（断点续传）
+    print(f"\n[步骤 1] 检查已存在数据（断点续传）")
+    existing_prompts = load_existing_prompts(str(output_dir_path.parent if template else output_dir_path), template)
 
-    # 步骤 3: 转换格式
-    print(f"\n[步骤 3] 转换为 {format} 格式")
-    training_data = convert_training_format(data, format=format)
-    print(f"[信息] 转换完成，共 {len(training_data)} 条数据")
+    # 步骤 2: 加载标注数据
+    print(f"\n[步骤 2] 加载标注数据")
+    data = load_labeled_data(input_dir, existing_prompts)
 
-    # 步骤 3.5: 添加 /no_think 功能（仅对 trl_grpo 格式有效）
-    if format == "trl_grpo" and no_think_count > 0:
-        print(f"\n[步骤 3.5] 添加 /no_think 模式数据")
-
-        # 为每个数据项添加索引，以便恢复原始顺序
-        indexed_data = list(enumerate(training_data))
-
-        # 根据字符数排序（prompt + solution）
-        def get_total_length(idx_item):
-            item = idx_item[1]
-            prompt = item.get("prompt", [{}])[0].get("content", "") if item.get("prompt") else ""
-            solution = item.get("solution", "")
-            return len(prompt) + len(solution)
-
-        # 排序数据（保留原始索引）
-        sorted_indexed_data = sorted(indexed_data, key=get_total_length)
-        total_len = len(sorted_indexed_data)
-
-        print(f"[信息] 已根据字符数排序数据（prompt + solution）")
-
-        # 取前 n 条和后 n 条数据（数量不超过总数据的一半）
-        n = min(no_think_count, total_len // 2)
-
-        if n == 0:
-            print(f"[警告] 无法添加 /no_think：数据总数 ({total_len}) 太少")
-        else:
-            # 选择前 n 条和后 n 条数据
-            selected_indices = list(range(n)) + list(range(total_len - n, total_len))
-            print(f"[信息] 选择了前 {n} 条和后 {n} 条数据添加 /no_think")
-
-            # 为选中的数据添加 /no_think 后缀
-            modified_count = 0
-            for idx in selected_indices:
-                original_idx, item = sorted_indexed_data[idx]
-                if item.get("prompt") and len(item["prompt"]) > 0:
-                    original_content = item["prompt"][0].get("content", "")
-                    # 检查是否已经包含 /no_think
-                    if not original_content.rstrip().endswith("/no_think"):
-                        item["prompt"][0]["content"] = original_content.rstrip() + " /no_think"
-                        modified_count += 1
-
-            # 恢复原始顺序
-            training_data = [item for idx, item in sorted(sorted_indexed_data, key=lambda x: x[0])]
-            print(f"[信息] 成功为 {modified_count} 条数据添加了 /no_think 后缀")
-
-    # 如果需要打乱数据（在非拆分模式下）
-    if shuffle:
-        import random
-        random.seed(seed)
-        random.shuffle(training_data)
-        print(f"[信息] 数据已打乱（seed: {seed}）")
-
-    # 步骤 4: 验证数据
-    print(f"\n[步骤 4] 验证数据质量")
-    validation_result = validate_training_data(training_data, format=format)
-
-    if validation_result["errors"]:
-        print(f"[错误] 发现 {len(validation_result['errors'])} 个错误:")
-        for error in validation_result["errors"][:10]:  # 只显示前 10 个
-            print(f"  - {error}")
-        if len(validation_result["errors"]) > 10:
-            print(f"  ... 还有 {len(validation_result['errors']) - 10} 个错误")
-
-    if validation_result["warnings"]:
-        print(f"[警告] 发现 {len(validation_result['warnings'])} 个警告:")
-        for warning in validation_result["warnings"][:10]:  # 只显示前 10 个
-            print(f"  - {warning}")
-        if len(validation_result["warnings"]) > 10:
-            print(f"  ... 还有 {len(validation_result['warnings']) - 10} 个警告")
-
-    # 统计信息
-    stats = validation_result["stats"]
-    print(f"\n[统计]")
-    print(f"  总数据: {stats['total']}")
-    print(f"  空 prompt: {stats['empty_prompt']}")
-    print(f"  空 response: {stats['empty_response']}")
-    print(f"  过短: {stats['too_short']}")
-    print(f"  过长: {stats['too_long']}")
-
-    if not validation_result["valid"]:
-        print(f"\n[错误] 数据验证失败，请修复错误后重试")
+    if len(data) == 0:
+        print(f"\n[完成] 没有新数据需要处理")
         return
 
-    # 步骤 5: 拆分数据集（可选）
-    if split_ratio:
-        print(f"\n[步骤 5] 拆分数据集")
+    # 步骤 3: 按字符数排序
+    print(f"\n[步骤 3] 按字符数排序")
+    data = sort_data_by_length(data)
 
-        # 过滤已存在的数据
-        print(f"\n[步骤 5.1] 检查并过滤已存在的数据")
-        existing_hashes = load_existing_hashes(output_dir, format)
-        training_data, skipped_count = filter_new_data(training_data, format, existing_hashes)
+    # 步骤 4: 拆分为三组数据
+    print(f"\n[步骤 4] 拆分数据集")
+    sft_data, grpo_data, eval_data = split_into_three_sets(data)
 
-        if skipped_count > 0:
-            print(f"[信息] 跳过 {skipped_count} 条已存在的数据")
+    # 打乱数据顺序
+    print(f"\n[步骤 5] 打乱数据顺序（seed: {seed}）")
+    random.seed(seed)
+    random.shuffle(sft_data)
+    random.shuffle(grpo_data)
+    random.shuffle(eval_data)
+    print(f"[信息] 数据已打乱")
 
-        # 如果没有新数据，提前返回
-        if len(training_data) == 0:
-            print(f"\n[跳过] 所有数据都已存在，无需保存")
-            return
+    # 步骤 6: 格式化并保存 SFT 数据
+    print(f"\n[步骤 6] 格式化并保存 SFT 数据")
+    sft_formatted = format_sft_data(sft_data)
+    sft_file = output_dir_path / f"sft_labeled_{timestamp}.jsonl"
+    save_jsonl_data(sft_formatted, str(sft_file))
 
-        ratios = [float(r.strip()) for r in split_ratio.split(',')]
-        if len(ratios) != 3:
-            raise ValueError(f"split_ratio 格式错误，应为 'train,val,test'，例如: '0.8,0.1,0.1'")
+    # 步骤 7: 格式化并保存 GRPO 数据
+    print(f"\n[步骤 7] 格式化并保存 GRPO 数据")
+    grpo_formatted = format_grpo_data(grpo_data)
+    grpo_file = output_dir_path / f"grpo_labeled_{timestamp}.jsonl"
+    save_jsonl_data(grpo_formatted, str(grpo_file))
 
-        train_data, val_data, test_data = split_train_val_test(
-            training_data,
-            train_ratio=ratios[0],
-            val_ratio=ratios[1],
-            test_ratio=ratios[2],
-            shuffle=shuffle,
-            seed=seed
-        )
+    # 步骤 8: 格式化并保存评估数据
+    print(f"\n[步骤 8] 格式化并保存评估数据")
+    eval_formatted = format_eval_data(eval_data)
+    eval_file = output_dir_path / f"eval_labeled_{timestamp}.jsonl"
+    save_jsonl_data(eval_formatted, str(eval_file))
 
-        # 保存拆分后的数据
-        output_dir_path = Path(output_dir)
-        output_dir_path.mkdir(parents=True, exist_ok=True)
-
-        if output_file:
-            # 从用户指定的文件名提取基础名称
-            base_name = Path(output_file).stem
-        else:
-            # 生成默认基础文件名
-            timestamp = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-            base_name = f"{format}_labeled_{timestamp}"
-
-        # 根据格式确定文件扩展名
-        ext = '.jsonl' if format == 'trl_grpo' else '.json'
-
-        # 保存训练集
-        train_file = output_dir_path / f"{base_name}_train{ext}"
-        save_training_data(train_data, str(train_file), format)
-
-        # 保存验证集
-        val_file = output_dir_path / f"{base_name}_val{ext}"
-        save_training_data(val_data, str(val_file), format)
-
-        # 保存测试集
-        test_file = output_dir_path / f"{base_name}_test{ext}"
-        save_training_data(test_data, str(test_file), format)
-
-        # 保存合并数据（可选，用于快速测试）
-        merged_file = output_dir_path / f"{base_name}_all{ext}"
-        save_training_data(6, str(merged_file), format)
-    else:
-        # 步骤 5: 保存数据（不拆分）
-
-        # 过滤已存在的数据
-        print(f"\n[步骤 5.1] 检查并过滤已存在的数据")
-        existing_hashes = load_existing_hashes(output_dir, format)
-        training_data, skipped_count = filter_new_data(training_data, format, existing_hashes)
-
-        if skipped_count > 0:
-            print(f"[信息] 跳过 {skipped_count} 条已存在的数据")
-
-        # 如果没有新数据，提前返回
-        if len(training_data) == 0:
-            print(f"\n[跳过] 所有数据都已存在，无需保存")
-            return
-
-        output_dir_path = Path(output_dir)
-        output_dir_path.mkdir(parents=True, exist_ok=True)
-
-        if output_file:
-            # 使用用户指定的文件名
-            output_path = output_dir_path / output_file
-            print(f"\n[步骤 5] 保存训练数据")
-            save_training_data(training_data, str(output_path), format)
-        else:
-            # 生成默认输出文件名
-            timestamp = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-            ext = '.jsonl' if format == 'trl_grpo' else '.json'
-            default_filename = f"{format}_labeled_{timestamp}{ext}"
-            default_output = output_dir_path / default_filename
-            print(f"\n[步骤 5] 保存训练数据")
-            save_training_data(training_data, str(default_output), format)
-
-    print(f"\n[完成] 训练数据构建完成")
+    print(f"\n[完成] 所有数据处理完成！")
 
 
 def parse_args():
@@ -277,74 +470,31 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--input',
+        '--input-dir',
         type=str,
-        default="../../../labeled_data/outline/project-1-at-2026-02-09-11-53-dc95da81.json",
-        help='输入 JSON 文件路径（标注数据）'
-    )
-
-    parser.add_argument(
-        '--format',
-        type=str,
-        default='trl_grpo',
-        choices=['alpaca', 'sharegpt', 'instruction', 'openai', 'trl_grpo'],
-        help='目标训练格式（默认: alpaca）'
+        default="../../../labeled_data/outline/three_column",
+        help='输入文件夹路径（标注数据）'
     )
 
     parser.add_argument(
         '--output-dir',
         type=str,
         default='../../../training_data/outline',
-        help='输出文件夹路径（默认：../../training_data/）'
+        help='输出文件夹路径（默认：../../training_data/outline/）'
     )
 
     parser.add_argument(
-        '--output-file',
+        '--template',
         type=str,
-        default=None,
-        help='输出文件名（默认：{format}_labeled_{timestamp}.json 或 .jsonl）'
-    )
-
-    parser.add_argument(
-        '--split-ratio',
-        type=str,
-        default=None,
-        help='数据集拆分比例，格式: "train,val,test"，例如: "0.8,0.1,0.1"'
-    )
-
-    parser.add_argument(
-        '--min-length',
-        type=int,
-        default=None,
-        help='响应最小长度（字符数），过滤过短的响应'
-    )
-
-    parser.add_argument(
-        '--max-length',
-        type=int,
-        default=None,
-        help='响应最大长度（字符数），过滤过长的响应'
-    )
-
-    parser.add_argument(
-        '--shuffle',
-        action='store_true',
-        default=True,
-        help='是否打乱数据（默认: True）'
+        default='three_column',
+        help='模板名称（如 three_column），用于创建子目录保存数据'
     )
 
     parser.add_argument(
         '--seed',
         type=int,
         default=42,
-        help='随机种子（默认: 42）'
-    )
-
-    parser.add_argument(
-        '--no-think-count',
-        type=int,
-        default=10,
-        help='添加 /no_think 的数据数量（从字符数最少和最多的数据中选择，默认: 0）'
+        help='随机种子，用于 shuffle 数据（默认：42）'
     )
 
     return parser.parse_args()
@@ -354,16 +504,10 @@ def main():
     """命令行入口"""
     args = parse_args()
     convert_labeled_to_training(
-        input_file=args.input,
-        format=args.format,
+        input_dir=args.input_dir,
         output_dir=args.output_dir,
-        output_file=args.output_file,
-        split_ratio=args.split_ratio,
-        min_length=args.min_length,
-        max_length=args.max_length,
-        shuffle=args.shuffle,
-        seed=args.seed,
-        no_think_count=args.no_think_count
+        template=args.template,
+        seed=args.seed
     )
 
 

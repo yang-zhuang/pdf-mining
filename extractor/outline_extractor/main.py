@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument(
         '--input-path',
         type=str,
-        default='../../sample_data/ocr_results',
+        default='D:\\papers\\ACL-2025-paper\\ACL\\ACL-2025-paper-parse-result', # '../../sample_data/ocr_results'
         help='OCR 结果文件路径或文件夹路径（文件夹会递归搜索所有子文件夹中的 .json 文件）。默认使用示例数据：../../sample_data/ocr_results。完整数据路径示例："D:\\papers\\ACL-2025-paper\\ACL\\ACL-2025-paper-parse-result"'
     )
 

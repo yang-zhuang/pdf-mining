@@ -18,8 +18,8 @@
         └── README.md
 """
 
-from .utils import BaseLabelingExporter
-from .outline.prepare import prepare_outline_labeling_data
+from labeling.utils import BaseLabelingExporter
+from labeling.outline.main import prepare_outline_labeling_data
 
 __all__ = [
     'BaseLabelingExporter',

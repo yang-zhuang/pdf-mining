@@ -55,6 +55,12 @@ MODEL_PROFILES: Dict[str, Dict] = {
         'supports_multimodal': True,
         'auto_wrap_text_prompt': True,  # 关键：内部自动适配
     },
+    'Qwen/Qwen3.5-397B-A17B': {
+        'supports_thinking': False,
+        'supports_reasoning_stream': False,
+        'supports_multimodal': True,
+        'auto_wrap_text_prompt': True,  # 关键：内部自动适配
+    },
     'meituan-longcat/LongCat-Flash-Lite': {
         'supports_thinking': False,
         'supports_reasoning_stream': False,
@@ -189,6 +195,8 @@ def call_llm(
 
     if backup_models is None:
         backup_models = [
+            'moonshotai/Kimi-K2.5',
+            'Qwen/Qwen3.5-397B-A17B',
             'deepseek-ai/DeepSeek-R1-0528',
             'Qwen/Qwen3-235B-A22B',
             'ZhipuAI/GLM-4.7-Flash',

@@ -1,0 +1,40 @@
+<View>
+  <!-- 样式定义 -->
+  <Style>
+    /* 定义一个类，当用户点击该区域时，自动选中所有文本 */
+    .copyable-text {
+      user-select: all;       /* 关键属性：点击即全选 */
+      cursor: pointer;        /* 鼠标移上去变成手型，提示可点击 */
+      white-space: pre-wrap;  /* 保持换行格式 */
+      font-family: monospace; /* (可选) 使用等宽字体，看代码更方便 */
+    }
+
+    /* 鼠标悬停时给一个背景色提示 */
+    .copyable-text:hover {
+      background-color: #e0f7fa;
+      border-radius: 4px;
+    }
+  </Style>
+
+  <!-- 主容器：左右分栏 -->
+  <View style="display: flex; flex-direction: row; gap: 20px; height: 80vh;">
+
+    <!-- 左侧：Prompt (添加了提示语) -->
+    <View style="flex: 1; background: #f8f8f8; padding: 15px; border-radius: 5px; overflow-y: auto;">
+      <!-- 提示头 -->
+      <Header value="User Prompt (Click text to select all)" style="font-size: 14px; color: #666; margin-bottom: 5px;" />
+
+      <!-- 这里的 View 加上了我们在 Style 里定义的 class -->
+      <View className="copyable-text">
+        <Text name="prompt_text" value="$prompt"/>
+      </View>
+    </View>
+
+    <!-- 右侧：Response 编辑 -->
+    <View style="flex: 1; padding: 15px; border: 1px solid #eee; border-radius: 5px; overflow-y: auto;">
+      <Header value="Model Response (Edit)" />
+      <TextArea name="refined_response" toName="prompt_text" value="$response" editable="true" maxSubmissions="1" rows="20" style="min-height: 400px;"/>
+    </View>
+
+  </View>
+</View>
