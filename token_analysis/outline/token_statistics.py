@@ -165,7 +165,7 @@ def get_sft_text(sample):
     return input_text, output_text
 
 
-def get_grpo_text(sample):
+def get_grpo_text(sample, include_thinking=True):
     """获取GRPO样本的文本（输入: prompt，输出: thinking + solution）"""
     data = sample['data']
     prompt = data.get('prompt', [])
@@ -178,15 +178,19 @@ def get_grpo_text(sample):
     else:
         input_text = ""
 
-    # 处理输出文本（thinking + solution）
+    # 处理输出文本
     thinking = data.get('thinking', '')
     solution = data.get('solution', '')
-    output_text = thinking + solution
+
+    if include_thinking:
+        output_text = thinking + solution
+    else:
+        output_text = solution
 
     return input_text, output_text
 
 
-def get_eval_text(sample):
+def get_eval_text(sample, include_thinking=True):
     """获取EVAL样本的文本（输入: prompt，输出: thinking + answer）"""
     data = sample['data']
     prompt = data.get('prompt', [])
@@ -199,10 +203,14 @@ def get_eval_text(sample):
     else:
         input_text = ""
 
-    # 处理输出文本（thinking + answer）
+    # 处理输出文本
     thinking = data.get('thinking', '')
     answer = data.get('answer', '')
-    output_text = thinking + answer
+
+    if include_thinking:
+        output_text = thinking + answer
+    else:
+        output_text = answer
 
     return input_text, output_text
 
@@ -272,8 +280,14 @@ def find_data_files(data_dir, data_types):
 
     pattern_map = {
         'sft': 'sft_labeled_*.jsonl',
+        'sft_with_thinking': 'sft_labeled_with_thinking_*.jsonl',
+        'sft_no_thinking': 'sft_labeled_no_thinking_*.jsonl',
         'grpo': 'grpo_labeled_*.jsonl',
+        'grpo_with_thinking': 'grpo_labeled_*.jsonl',
+        'grpo_no_thinking': 'grpo_labeled_*.jsonl',
         'eval': 'eval_labeled_*.jsonl',
+        'eval_with_thinking': 'eval_labeled_*.jsonl',
+        'eval_no_thinking': 'eval_labeled_*.jsonl',
     }
 
     for dtype in data_types:
@@ -304,9 +318,13 @@ def main():
         '--types',
         type=str,
         nargs='+',
-        choices=['sft', 'grpo', 'eval'],
-        default=['sft', 'grpo', 'eval'],
-        help='要统计的数据类型（可多选）'
+        choices=['sft', 'sft_with_thinking', 'sft_no_thinking',
+                 'grpo', 'grpo_with_thinking', 'grpo_no_thinking',
+                 'eval', 'eval_with_thinking', 'eval_no_thinking'],
+        default=['sft_with_thinking', 'sft_no_thinking',
+                 'grpo_with_thinking', 'grpo_no_thinking',
+                 'eval_with_thinking', 'eval_no_thinking'],
+        help='要统计的数据类型（可多选）。sft/grpo/eval会包含所有对应文件，_with_thinking/_no_thinking分别统计带/无思考内容'
     )
     parser.add_argument(
         '--model-name',
@@ -341,14 +359,27 @@ def main():
     # 按类型加载数据
     loaders = {
         'sft': load_sft_data,
+        'sft_with_thinking': load_sft_data,
+        'sft_no_thinking': load_sft_data,
         'grpo': load_grpo_data,
+        'grpo_with_thinking': load_grpo_data,
+        'grpo_no_thinking': load_grpo_data,
         'eval': load_eval_data,
+        'eval_with_thinking': load_eval_data,
+        'eval_no_thinking': load_eval_data,
     }
 
-    text_getters = {
-        'sft': get_sft_text,
-        'grpo': get_grpo_text,
-        'eval': get_eval_text,
+    # 文本获取器配置
+    text_getter_config = {
+        'sft': ('get_sft_text', {}),
+        'sft_with_thinking': ('get_sft_text', {}),
+        'sft_no_thinking': ('get_sft_text', {}),
+        'grpo': ('get_grpo_text', {'include_thinking': True}),
+        'grpo_with_thinking': ('get_grpo_text', {'include_thinking': True}),
+        'grpo_no_thinking': ('get_grpo_text', {'include_thinking': False}),
+        'eval': ('get_eval_text', {'include_thinking': True}),
+        'eval_with_thinking': ('get_eval_text', {'include_thinking': True}),
+        'eval_no_thinking': ('get_eval_text', {'include_thinking': False}),
     }
 
     # 收集所有token计数
@@ -359,7 +390,8 @@ def main():
     for dtype, files in files_by_type.items():
         print(f"\n处理 {dtype} 数据...")
         loader = loaders[dtype]
-        text_getter = text_getters[dtype]
+        getter_name, getter_kwargs = text_getter_config[dtype]
+        text_getter = globals()[getter_name]
 
         total_samples = 0
         for filepath in files:
@@ -368,7 +400,7 @@ def main():
             total_samples += len(samples)
 
             for i, sample in enumerate(samples):
-                input_text, output_text = text_getter(sample)
+                input_text, output_text = text_getter(sample, **getter_kwargs)
 
                 if input_text:
                     input_tokens = count_tokens(input_text)

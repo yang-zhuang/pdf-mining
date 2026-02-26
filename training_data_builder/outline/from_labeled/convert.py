@@ -278,15 +278,15 @@ def split_into_three_sets(data: List[Dict]) -> Tuple[List[Dict], List[Dict], Lis
     return sft_data, grpo_data, eval_data
 
 
-def format_sft_data(data: List[Dict]) -> List[Dict]:
+def format_sft_data_with_thinking(data: List[Dict]) -> List[Dict]:
     """
-    格式化 SFT 数据为 unsloth 格式
+    格式化 SFT 数据为 unsloth 格式（带思考内容）
 
     格式：
     {
         "conversations": [
             {"content": prompt, "role": "user"},
-            {"content": "思考内容\n\n答案", "role": "assistant"}
+            {"content": "\n\n{thinking}\n\n\n{answer}", "role": "assistant"}
         ]
     }
     """
@@ -297,8 +297,11 @@ def format_sft_data(data: List[Dict]) -> List[Dict]:
         thinking = item.get('thinking', '')
         answer = item.get('answer', '')
 
-        # assistant 的 content 是 "思考内容\n\n答案"
-        assistant_content = f"<think>\n{thinking}\n</think>\n\n{answer}" if thinking else answer
+        # assistant 的 content 是 "\n\n{thinking}\n\n\n{answer}"
+        if thinking:
+            assistant_content = f"<think>\n{thinking}\n</think>\n\n{answer}"
+        else:
+            assistant_content = answer
         assistant_content = assistant_content.strip()
 
         sft_item = {
@@ -309,6 +312,41 @@ def format_sft_data(data: List[Dict]) -> List[Dict]:
                 },
                 {
                     "content": assistant_content,
+                    "role": "assistant"
+                }
+            ]
+        }
+        sft_formatted.append(sft_item)
+
+    return sft_formatted
+
+
+def format_sft_data_no_thinking(data: List[Dict]) -> List[Dict]:
+    """
+    格式化 SFT 数据为 unsloth 格式（无思考内容）
+
+    格式：
+    {
+        "conversations": [
+            {"content": prompt, "role": "user"},
+            {"content": answer, "role": "assistant"}
+        ]
+    }
+    """
+    sft_formatted = []
+
+    for item in data:
+        prompt = item.get('prompt', '')
+        answer = item.get('answer', '')
+
+        sft_item = {
+            "conversations": [
+                {
+                    "content": prompt,
+                    "role": "user"
+                },
+                {
+                    "content": answer,
                     "role": "assistant"
                 }
             ]
@@ -441,11 +479,17 @@ def convert_labeled_to_training(
     random.shuffle(eval_data)
     print(f"[信息] 数据已打乱")
 
-    # 步骤 6: 格式化并保存 SFT 数据
-    print(f"\n[步骤 6] 格式化并保存 SFT 数据")
-    sft_formatted = format_sft_data(sft_data)
-    sft_file = output_dir_path / f"sft_labeled_{timestamp}.jsonl"
-    save_jsonl_data(sft_formatted, str(sft_file))
+    # 步骤 6: 格式化并保存 SFT 数据（带思考内容）
+    print(f"\n[步骤 6] 格式化并保存 SFT 数据（带思考内容）")
+    sft_formatted_with_thinking = format_sft_data_with_thinking(sft_data)
+    sft_file_with_thinking = output_dir_path / f"sft_labeled_with_thinking_{timestamp}.jsonl"
+    save_jsonl_data(sft_formatted_with_thinking, str(sft_file_with_thinking))
+
+    # 步骤 6.5: 格式化并保存 SFT 数据（无思考内容）
+    print(f"\n[步骤 6.5] 格式化并保存 SFT 数据（无思考内容）")
+    sft_formatted_no_thinking = format_sft_data_no_thinking(sft_data)
+    sft_file_no_thinking = output_dir_path / f"sft_labeled_no_thinking_{timestamp}.jsonl"
+    save_jsonl_data(sft_formatted_no_thinking, str(sft_file_no_thinking))
 
     # 步骤 7: 格式化并保存 GRPO 数据
     print(f"\n[步骤 7] 格式化并保存 GRPO 数据")

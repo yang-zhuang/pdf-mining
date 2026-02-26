@@ -1,0 +1,7 @@
+vllm serve /mnt/d/modelscope/Qwen3-4B-Instruct-2507 \
+--served-model-name Qwen3-4B-Instruct-2507 \
+--gpu-memory-utilization 0.85 \
+--max-model-len 20480 \
+--max-num-seqs 20 \
+--port 8000 \
+--quantization bitsandbytes

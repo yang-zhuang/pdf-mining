@@ -82,3 +82,5 @@ token_analysis/outline/thinking/token_analysis/thinking_analysis_trl_grpo_labele
 label-studio.skill
 
 !training/outline/sft/Qwen3_(4B)-Instruct.ipynb
+!training/outline/sft/Qwen3_(4B)-Instruct_with_think.ipynb
+!training/outline/sft/Qwen3_(4B)-Instruct_without_think.ipynb

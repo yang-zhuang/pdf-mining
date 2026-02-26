@@ -1,0 +1,16 @@
+{
+  "macro_precision": 0.6496957023055062,
+  "macro_recall": 0.5383953063457474,
+  "macro_f1": 0.5687834886290893,
+  "micro_precision": 0.7714116952155936,
+  "micro_recall": 0.39635811836115326,
+  "micro_f1": 0.5236567762630312,
+  "total_tp": 1306,
+  "total_fp": 393,
+  "total_fn": 1989,
+  "total_pred": 1693,
+  "total_gt": 3295,
+  "total_samples": 98,
+  "avg_inference_time": 266.42688679938414,
+  "total_inference_time": 26109.834906339645
+}

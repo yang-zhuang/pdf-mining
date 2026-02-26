@@ -1,0 +1,16 @@
+{
+  "macro_precision": 0.0,
+  "macro_recall": 0.0,
+  "macro_f1": 0.0,
+  "micro_precision": 0.0,
+  "micro_recall": 0.0,
+  "micro_f1": 0.0,
+  "total_tp": 0,
+  "total_fp": 177,
+  "total_fn": 28,
+  "total_pred": 177,
+  "total_gt": 28,
+  "total_samples": 1,
+  "avg_inference_time": 84.28991031646729,
+  "total_inference_time": 84.28991031646729
+}
